@@ -1,20 +1,6 @@
-// Benchmark harness.
-//
-// Two decisions worth explaining, because both were mistakes on the first try:
-//
-// 1. RATIOS, NOT ABSOLUTE NANOSECONDS.
-//    Absolute per-op figures depend on CPU, clock source, and timer overhead,
-//    and do not transfer between machines. The ratio between two
-//    implementations measured in the same process on the same input does.
-//
-// 2. BATCHED TIMING, NOT PER-OPERATION TIMING.
-//    The first version timed every individual operation. On this machine
-//    steady_clock has a resolution of roughly 40ns, which is larger than the
-//    operations being measured, so every sample quantized to one or two clock
-//    ticks and the p50 for both implementations came out identical. That
-//    result was an artifact of the timer, not a property of the books. The
-//    harness now times chunks of operations and reports ns/op, which pushes
-//    the measured interval well above clock resolution.
+// Compare both books on seeded workloads. Timing samples average 256 operations;
+// percentiles describe those averages, not individual-operation tail latency.
+// Timings and speedup ratios depend on hardware, compiler, and workload.
 
 #include <algorithm>
 #include <chrono>
@@ -254,7 +240,7 @@ int main(int argc, char** argv) {
 
     for (const Scenario& sc : scenarios) run_scenario(sc, warm_n, measure_n);
 
-    std::printf("\n  Ratios are the portable result. Absolute ns depend on this machine.\n");
+    std::printf("\n  Timings and speedup ratios depend on this machine and workload.\n");
     if (sink == 12345678ULL) std::printf(" ");
     return 0;
 }
