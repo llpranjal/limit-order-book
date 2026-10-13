@@ -86,6 +86,11 @@ private:
     void repair_best_ask(std::int32_t from_off);
 
     Quantity match(OrderId taker, Side taker_side, Quantity qty, const Price* limit);
+    // Single matching loop shared by both sides. taker_is_buy selects the ask
+    // array (scan up) vs the bid array (scan down) and flips the limit check.
+    Quantity match_levels(std::vector<LevelHead>& levels, std::int32_t& best_off,
+                          bool taker_is_buy, OrderId taker, Quantity qty,
+                          const Price* limit);
     void rest(OrderId id, Side side, Price price, Quantity qty);
 
     Price min_price_;

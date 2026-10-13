@@ -83,57 +83,50 @@ void ArrayBook::repair_best_ask(std::int32_t from_off) {
     best_ask_off_ = kNil;
 }
 
-Quantity ArrayBook::match(OrderId taker, Side taker_side, Quantity qty, const Price* limit) {
-    if (taker_side == Side::Buy) {
-        while (qty > 0 && best_ask_off_ != kNil) {
-            const std::int32_t off = best_ask_off_;
-            const Price level_price = price_at(off);
-            if (limit != nullptr && level_price > *limit) break;
-
-            LevelHead& level = ask_levels_[off];
-            while (qty > 0 && !level.empty()) {
-                const std::int32_t maker_idx = level.head;
-                Node& maker = pool_[maker_idx];
-                const Quantity fill = std::min(qty, maker.qty);
-
-                trades_.push_back(Trade{maker.id, taker, level_price, fill});
-                maker.qty -= fill;
-                qty -= fill;
-
-                if (maker.qty == 0) {
-                    index_.erase(maker.id);
-                    unlink(level, maker_idx);
-                    free_node(maker_idx);
-                }
-            }
-            if (level.empty()) repair_best_ask(off);
+Quantity ArrayBook::match_levels(std::vector<LevelHead>& levels, std::int32_t& best_off,
+                                   bool taker_is_buy, OrderId taker, Quantity qty,
+                                   const Price* limit) {
+    while (qty > 0 && best_off != kNil) {
+        const std::int32_t off = best_off;
+        const Price level_price = price_at(off);
+        // Buy taker can only lift offers at or below its limit.
+        // Sell taker can only hit bids at or above its limit.
+        // Market order (limit == nullptr) takes any price.
+        if (limit != nullptr) {
+            const bool acceptable = taker_is_buy ? (level_price <= *limit)
+                                                 : (level_price >= *limit);
+            if (!acceptable) break;
         }
-    } else {
-        while (qty > 0 && best_bid_off_ != kNil) {
-            const std::int32_t off = best_bid_off_;
-            const Price level_price = price_at(off);
-            if (limit != nullptr && level_price < *limit) break;
 
-            LevelHead& level = bid_levels_[off];
-            while (qty > 0 && !level.empty()) {
-                const std::int32_t maker_idx = level.head;
-                Node& maker = pool_[maker_idx];
-                const Quantity fill = std::min(qty, maker.qty);
+        LevelHead& level = levels[off];
+        while (qty > 0 && !level.empty()) {
+            const std::int32_t maker_idx = level.head;
+            Node& maker = pool_[maker_idx];
+            const Quantity fill = std::min(qty, maker.qty);
 
-                trades_.push_back(Trade{maker.id, taker, level_price, fill});
-                maker.qty -= fill;
-                qty -= fill;
+            trades_.push_back(Trade{maker.id, taker, level_price, fill});
+            maker.qty -= fill;
+            qty -= fill;
 
-                if (maker.qty == 0) {
-                    index_.erase(maker.id);
-                    unlink(level, maker_idx);
-                    free_node(maker_idx);
-                }
+            if (maker.qty == 0) {
+                index_.erase(maker.id);
+                unlink(level, maker_idx);
+                free_node(maker_idx);
             }
-            if (level.empty()) repair_best_bid(off);
+        }
+        if (level.empty()) {
+            if (taker_is_buy) repair_best_ask(off);
+            else repair_best_bid(off);
         }
     }
     return qty;
+}
+
+Quantity ArrayBook::match(OrderId taker, Side taker_side, Quantity qty, const Price* limit) {
+    if (taker_side == Side::Buy) {
+        return match_levels(ask_levels_, best_ask_off_, true, taker, qty, limit);
+    }
+    return match_levels(bid_levels_, best_bid_off_, false, taker, qty, limit);
 }
 
 void ArrayBook::rest(OrderId id, Side side, Price price, Quantity qty) {
